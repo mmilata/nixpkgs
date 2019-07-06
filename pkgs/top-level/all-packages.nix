@@ -23649,4 +23649,6 @@ in
     stdenv = crossLibcStdenv;
   };
 
+  sympa = callPackage ../servers/mail/sympa { };
+
 }

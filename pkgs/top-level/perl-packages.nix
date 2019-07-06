@@ -7105,6 +7105,31 @@ let
     buildInputs = [ PodCoverageTrustPod TestCPANMeta TestDifferences TestEOL TestKwalitee TestMemoryCycle TestNoTabs TestPAUSEPermissions TestPod TestPodCoverage ];
   };
 
+  HTMLStripScripts = buildPerlPackage rec {
+    name = "HTML-StripScripts-1.06";
+    src = fetchurl {
+      url = "mirror://cpan/authors/id/D/DR/DRTECH/${name}.tar.gz";
+      sha256 = "222bfb7ec1fdfa465e32da3dc4abed2edc7364bbe19e8e3c513c7d585b0109ad";
+    };
+    meta = {
+      description = "Strip scripting constructs out of HTML";
+      license = with stdenv.lib.licenses; [ artistic1 gpl1Plus ];
+    };
+  };
+
+  HTMLStripScriptsParser = buildPerlPackage rec {
+    name = "HTML-StripScripts-Parser-1.03";
+    src = fetchurl {
+      url = "mirror://cpan/authors/id/D/DR/DRTECH/${name}.tar.gz";
+      sha256 = "478c1a4e46eb77fa7bce96ba288168f0b98c27f250e00dc6312365081aed3407";
+    };
+    propagatedBuildInputs = [ HTMLParser HTMLStripScripts ];
+    meta = {
+      description = "XSS filter using HTML::Parser";
+      license = with stdenv.lib.licenses; [ artistic1 gpl1Plus ];
+    };
+  };
+
   HTMLTableExtract = buildPerlPackage rec {
     name = "HTML-TableExtract-2.13";
     src = fetchurl {
@@ -9515,6 +9540,19 @@ let
     buildInputs = [ ProcWaitStat ];
   };
 
+  MIMEEncWords = buildPerlPackage rec {
+    name = "MIME-EncWords-1.014.3";
+    src = fetchurl {
+      url = "mirror://cpan/authors/id/N/NE/NEZUMI/${name}.tar.gz";
+      sha256 = "e9afb548611d4e7e6c50b7f06bbd2b1bb2808e37a810deefb537c67af5485238";
+    };
+    propagatedBuildInputs = [ MIMECharset ];
+    meta = {
+      description = "Deal with RFC 2047 encoded words (improved)";
+      license = with stdenv.lib.licenses; [ artistic1 gpl1Plus ];
+    };
+  };
+
   MIMELite = buildPerlPackage rec {
     name = "MIME-Lite-3.030";
     src = fetchurl {
@@ -9524,6 +9562,20 @@ let
     propagatedBuildInputs = [ EmailDateFormat ];
     meta = {
       description = "Low-calorie MIME generator (DEPRECATED)";
+      license = with stdenv.lib.licenses; [ artistic1 gpl1Plus ];
+    };
+  };
+
+  MIMELiteHTML = buildPerlPackage rec {
+    name = "MIME-Lite-HTML-1.24";
+    src = fetchurl {
+      url = "mirror://cpan/authors/id/A/AL/ALIAN/${name}.tar.gz";
+      sha256 = "db603ccbf6653bcd28cfa824d72e511ead019fc8afb9f1854ec872db2d3cd8da";
+    };
+    doCheck = false;
+    propagatedBuildInputs = [ HTMLParser LWP MIMELite URI ];
+    meta = {
+      description = "Provide routine to transform a HTML page in a MIME-Lite mail";
       license = with stdenv.lib.licenses; [ artistic1 gpl1Plus ];
     };
   };
