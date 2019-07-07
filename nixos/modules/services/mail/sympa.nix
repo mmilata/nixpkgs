@@ -193,19 +193,20 @@ in
       services.postfix = {
         # XXX: ?? proly not
         enable = true;
-        extraConfig = ''
-          virtual_alias_maps = hash:/srv/sympa/virtual.sympa
-          virtual_mailbox_base = hash:/srv/sympa/transport.sympa
-            hash:/srv/sympa/sympa_transport,
-            hash:/srv/sympa/virtual.sympa
-          virtual_mailbox_domains = hash:/srv/sympa/transport.sympa
-
-          transport_maps = hash:/srv/sympa/transport.sympa,
-            hash:/srv/sympa/sympa_transport
-
-          # for VERP
-          recipient_delimiter = +
-        '';
+        recipientDelimiter = "+";
+        config = {
+          virtual_alias_maps = [ "hash:/srv/sympa/virtual.sympa" ];
+          virtual_mailbox_maps = [
+            "hash:/srv/sympa/transport.sympa"
+            "hash:/srv/sympa/sympa_transport"
+            "hash:/srv/sympa/virtual.sympa"
+          ];
+          virtual_mailbox_domains = [ "hash:/srv/sympa/transport.sympa" ];
+          transport_maps = [
+            "hash:/srv/sympa/transport.sympa"
+            "hash:/srv/sympa/sympa_transport"
+          ];
+        };
         masterConfig = {
           "sympa" = {
             type = "unix";
