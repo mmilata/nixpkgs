@@ -210,7 +210,7 @@ in
         masterConfig = {
           "sympa" = {
             type = "unix";
-            privileged = false;
+            privileged = true;
             chroot = false;
             command = "pipe";
             args = [
@@ -222,7 +222,7 @@ in
           };
           "sympabounce" = {
             type = "unix";
-            privileged = false;
+            privileged = true;
             chroot = false;
             command = "pipe";
             args = [
