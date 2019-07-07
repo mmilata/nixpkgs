@@ -286,6 +286,7 @@ in
           Type = "forking";
           Restart = "always";
           ExecStart = "${pkgs.sympa}/bin/sympa_msg.pl";
+          PIDFile = "/run/sympa/sympa_msg.pid";
         };
 
         preStart = ''
@@ -328,6 +329,7 @@ in
           Type = "forking";
           Restart = "always";
           ExecStart = "${pkgs.sympa}/bin/archived.pl";
+          PIDFile = "/run/sympa/archived.pid";
         };
       };
       systemd.services.sympa-bounce = {
@@ -338,6 +340,7 @@ in
           Type = "forking";
           Restart = "always";
           ExecStart = "${pkgs.sympa}/bin/bounced.pl";
+          PIDFile = "/run/sympa/bounced.pid";
         };
       };
       systemd.services.sympa-bulk = {
@@ -359,6 +362,7 @@ in
           Type = "forking";
           Restart = "always";
           ExecStart = "${pkgs.sympa}/bin/task_manager.pl";
+          PIDFile = "/run/sympa/task_manager.pid";
         };
       };
     }
@@ -381,6 +385,7 @@ in
             -s /run/sympa/wwsympa.socket \
             ${pkgs.sympa}/bin/wwsympa.fcgi
           '';
+          PIDFile = "/run/sympa/wwsympa.pid";
         };
       };
     })
