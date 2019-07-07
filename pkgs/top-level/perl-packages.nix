@@ -9500,12 +9500,13 @@ let
   };
 
   MHonArc = buildPerlPackage rec {
-    name = "MHonArc-2.6.18";
+    name = "MHonArc-2.6.19";
 
     src = fetchurl {
-      url    = "http://dcssrv1.oit.uci.edu/indiv/ehood/release/MHonArc/tar/${name}.tar.gz";
-      sha256 = "1xmf26dfwr8achprc3n1pxgl0mkiyr6pf25wq3dqgzqkghrrsxa2";
+      url = "mirror://cpan/authors/id/E/EH/EHOOD/${name}.tar.gz";
+      sha256 = "f8bf2874e6ea37830b0d5155fb99acf788005877df7573f1276344e947da8352";
     };
+    patches = [ ../development/perl-modules/MHonArc-defined-hash.patch ];
     outputs = [ "out" "dev" ]; # no "devdoc"
 
     installTargets = "install";

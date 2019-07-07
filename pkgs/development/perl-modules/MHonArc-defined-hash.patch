@@ -1,0 +1,24 @@
+diff -Nru MHonArc-2.6.19-orig/lib/mhamain.pl MHonArc-2.6.19/lib/mhamain.pl
+--- MHonArc-2.6.19-orig/lib/mhamain.pl	2019-07-04 02:54:46.684701671 +0200
++++ MHonArc-2.6.19/lib/mhamain.pl	2019-07-04 02:55:13.653599149 +0200
+@@ -1562,7 +1562,7 @@
+ ##
+ sub defineIndex2MsgId {
+     no warnings qw(deprecated);
+-    if (!defined(%Index2MsgId)) {
++    if (!%Index2MsgId) {
+ 	foreach (keys %MsgId) {
+ 	    $Index2MsgId{$MsgId{$_}} = $_;
+ 	}
+diff -Nru MHonArc-2.6.19-orig/lib/mhopt.pl MHonArc-2.6.19/lib/mhopt.pl
+--- MHonArc-2.6.19-orig/lib/mhopt.pl	2019-07-04 02:54:46.685701667 +0200
++++ MHonArc-2.6.19/lib/mhopt.pl	2019-07-04 19:42:56.167517950 +0200
+@@ -865,7 +865,7 @@
+ sub update_data_2_1_to_later {
+     no warnings qw(deprecated);
+     # we can preserve filter arguments
+-    if (defined(%main::MIMEFiltersArgs)) {
++    if (%main::MIMEFiltersArgs) {
+ 	warn qq/         preserving MIMEARGS...\n/;
+ 	%readmail::MIMEFiltersArgs = %main::MIMEFiltersArgs;
+ 	$IsDefault{'MIMEARGS'} = 0;
