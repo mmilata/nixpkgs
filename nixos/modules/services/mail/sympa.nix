@@ -21,14 +21,13 @@ let
     lang        ${cfg.lang}
 
     home /srv/sympa/list_data
-    # db_type PostgreSQL
-    # db_name sympa
-    # db_host localhost
-    # db_port 5342
-    # db_user sympa
-    # db_passwd secret
-    db_type SQLite
-    db_name /tmp/sympa.sqlite
+
+    db_type ${cfg.database.type}
+    db_name ${cfg.database.name}
+    ${optionalString (cfg.database.host != null) "db_host ${cfg.database.host}"}
+    ${optionalString (cfg.database.port != null) "db_port ${cfg.database.port}"}
+    ${optionalString (cfg.database.user != null) "db_user ${cfg.database.user}"}
+    ${optionalString (cfg.database.password != null) "db_passwd ${cfg.database.password}"}
 
     sendmail /run/wrappers/bin/sendmail
     sendmail_aliases /srv/sympa/sympa_transport
@@ -144,6 +143,47 @@ in
         '';
       };
 
+      database = {
+        type = mkOption {
+          type = types.enum [ "SQLite" "PostgreSQL" "MySQL" ];
+          default = "SQLite";
+          example = "MySQL";
+          description = "Database engine to use.";
+        };
+
+        host = mkOption {
+          type = types.nullOr types.str;
+          default = "127.0.0.1";
+          description = "Database host address.";
+        };
+
+        port = mkOption {
+          type = types.nullOr types.port;
+          default = null;
+          description = "Database port.";
+        };
+
+        name = mkOption {
+          type = types.str;
+          default = if cfg.database.type == "SQLite" then "/srv/sympa/sympa.sqlite" else "sympa";
+          description = "Database name. When using SQLite this must be an absolute path to the database file.";
+        };
+
+        user = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Database user.";
+        };
+
+        password = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Database password. Warning: this is stored in cleartext in the Nix store!";
+        };
+
+        #passwordFile = mkOption {}; #TODO
+      };
+
       web = {
         enable = mkOption {
           type = types.bool;
@@ -169,7 +209,7 @@ in
 
   ###### implementation
 
-  config = mkIf config.services.sympa.enable (mkMerge [
+  config = mkIf cfg.enable (mkMerge [
     {
 
       environment = {
