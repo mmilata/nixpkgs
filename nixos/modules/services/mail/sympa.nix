@@ -7,6 +7,9 @@ let
   cfg = config.services.sympa;
   user = cfg.user;
   group = cfg.group;
+  # FIXME: force https for wwsympa_url (=generated links)?
+  # cfg.web.https will still be useful when there's https proxy in front of our nginx
+  url = "http${if cfg.web.https then "s" else ""}://${cfg.web.virtualHost}${cfg.web.location}";
 
   sympaSubServices = [
     "sympa-archive.service"
@@ -37,7 +40,7 @@ let
 
     ${optionalString cfg.web.enable ''
       # WEB
-      wwsympa_url         ${cfg.web.url}
+      wwsympa_url         ${strings.removeSuffix "/" url}
       static_content_path /srv/sympa/static_content
       css_path            /srv/sympa/static_content/css
       pictures_path       /srv/sympa/static_content/pictures
@@ -208,10 +211,33 @@ in
           description = "Whether to enable Sympa web interface.";
         };
 
-        url = mkOption {
+        server = mkOption {
+          type = types.enum [ "nginx" "none" ];
+          default = "nginx";
+          description = ''
+            The webserver used for the Sympa web interface. Set it to `none` if you want to configure it yourself.
+            Further nginx configuration can be done by adapting <literal>services.nginx.virtualHosts.&lt;name&gt;</literal>.
+          '';
+        };
+
+        virtualHost = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          example = "example.org";
+          description = "Domain part of the web interface URL (service.sympa.domain is used if null).";
+        };
+
+        location = mkOption {
           type = types.str;
-          example = "http://sympa.example.org/sympa";
-          description = "URL of the Sympa web interface.";
+          default = "/";
+          example = "/sympa";
+          description = "URL path part of the web interface.";
+        };
+
+        https = mkOption {
+          type = types.bool;
+          default = true;
+          description = "Whether to use HTTPS.";
         };
 
         fcgiProcs = mkOption {
@@ -264,6 +290,8 @@ in
           text = cfg.database.password;
         })));
 
+      services.sympa.web.virtualHost = mkDefault cfg.domain;
+
       services.postfix = {
         # XXX: ?? proly not
         enable = true;
@@ -306,40 +334,6 @@ in
               "\${nexthop}"
             ];
           };
-        };
-      };
-
-      # XXX: ?? proly not, mkIf sympa.(nginx, postfix).enable?
-      services.nginx.enable = true;
-
-      services.nginx.virtualHosts = {
-        "${cfg.domain}" = {
-          locations."/sympa".extraConfig = ''
-            fastcgi_pass unix:/run/sympa/wwsympa.socket;
-            fastcgi_split_path_info ^(/sympa)(.*)$;
-
-            fastcgi_param PATH_INFO          $fastcgi_path_info;
-            fastcgi_param SCRIPT_FILENAME    ${pkgs.sympa}/bin/wwsympa.fcgi;
-            fastcgi_param QUERY_STRING       $query_string;
-            fastcgi_param REQUEST_METHOD     $request_method;
-            fastcgi_param CONTENT_TYPE       $content_type;
-            fastcgi_param CONTENT_LENGTH     $content_length;
-            fastcgi_param PATH_INFO          $fastcgi_path_info;
-            fastcgi_param SCRIPT_NAME        $fastcgi_script_name;
-            fastcgi_param REQUEST_URI        $request_uri;
-            fastcgi_param DOCUMENT_URI       $document_uri;
-            fastcgi_param DOCUMENT_ROOT      $document_root;
-            fastcgi_param SERVER_PROTOCOL    $server_protocol;
-            fastcgi_param GATEWAY_INTERFACE  CGI/1.1;
-            fastcgi_param SERVER_SOFTWARE    nginx;
-            fastcgi_param REMOTE_ADDR        $remote_addr;
-            fastcgi_param REMOTE_PORT        $remote_port;
-            fastcgi_param SERVER_ADDR        $server_addr;
-            fastcgi_param SERVER_PORT        $server_port;
-            fastcgi_param SERVER_NAME        $host;
-          '';
-
-          locations."/static-sympa/".alias = "/srv/sympa/static_content/";
         };
       };
 
@@ -472,6 +466,31 @@ in
           PIDFile = "/run/sympa/wwsympa.pid";
         };
       };
+    })
+
+    (mkIf (cfg.web.enable && cfg.web.server == "nginx") {
+      services.nginx.enable = true;
+      services.nginx.virtualHosts = {
+        "${cfg.web.virtualHost}" = {
+          locations."${cfg.web.location}" = {
+            extraConfig = ''
+              include ${pkgs.nginx}/conf/fastcgi_params;
+
+              fastcgi_pass unix:/run/sympa/wwsympa.socket;
+              fastcgi_split_path_info ^(${cfg.web.location})(.*)$;
+
+              fastcgi_param PATH_INFO       $fastcgi_path_info;
+              fastcgi_param SCRIPT_FILENAME ${pkgs.sympa}/bin/wwsympa.fcgi;
+            '';
+          };
+
+          locations."/static-sympa/".alias = "/srv/sympa/static_content/";
+        } // optionalAttrs cfg.web.https {
+          forceSSL = mkDefault true;
+          enableACME = mkDefault true;
+        };
+      };
+
     })
   ]);
 }
