@@ -35,12 +35,14 @@ let
     aliases_program ${pkgs.postfix}/bin/postmap
     aliases_db_type hash
 
-    # WEB
-    wwsympa_url ${cfg.web.url}
-    static_content_path /srv/sympa/static_content
-    css_path            /srv/sympa/static_content/css
-    pictures_path       /srv/sympa/static_content/pictures
-    mhonarc ${pkgs.perlPackages.MHonArc}/bin/mhonarc
+    ${optionalString cfg.web.enable ''
+      # WEB
+      wwsympa_url         ${cfg.web.url}
+      static_content_path /srv/sympa/static_content
+      css_path            /srv/sympa/static_content/css
+      pictures_path       /srv/sympa/static_content/pictures
+      mhonarc             ${pkgs.perlPackages.MHonArc}/bin/mhonarc
+    ''}
 
     ${cfg.extraConfig}
   '';
