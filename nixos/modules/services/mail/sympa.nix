@@ -207,10 +207,17 @@ in
           default = true;
           description = "Whether to enable Sympa web interface.";
         };
+
         url = mkOption {
           type = types.str;
           example = "http://sympa.example.org/sympa";
           description = "URL of the Sympa web interface.";
+        };
+
+        fcgiProcs = mkOption {
+          type = types.ints.positive;
+          default = 2;
+          description = "Number of FastCGI processes to fork.";
         };
       };
 
@@ -457,7 +464,7 @@ in
             -g ${group} \
             -U nginx \
             -M 0600 \
-            -F 5 \
+            -F ${toString cfg.web.fcgiProcs} \
             -P /run/sympa/wwsympa.pid \
             -s /run/sympa/wwsympa.socket \
             ${pkgs.sympa}/bin/wwsympa.fcgi
