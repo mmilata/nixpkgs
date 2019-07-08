@@ -27,7 +27,7 @@ let
     ${optionalString (cfg.database.host != null) "db_host ${cfg.database.host}"}
     ${optionalString (cfg.database.port != null) "db_port ${cfg.database.port}"}
     ${optionalString (cfg.database.user != null) "db_user ${cfg.database.user}"}
-    ${optionalString (cfg.database.password != null) "db_passwd ${cfg.database.password}"}
+    db_passwd #dbpass#
 
     sendmail /run/wrappers/bin/sendmail
     sendmail_aliases /srv/sympa/sympa_transport
@@ -166,7 +166,10 @@ in
         name = mkOption {
           type = types.str;
           default = if cfg.database.type == "SQLite" then "/srv/sympa/sympa.sqlite" else "sympa";
-          description = "Database name. When using SQLite this must be an absolute path to the database file.";
+          description = ''
+            Database name. When using SQLite this must be an absolute
+            path to the database file.
+          '';
         };
 
         user = mkOption {
@@ -176,12 +179,24 @@ in
         };
 
         password = mkOption {
-          type = types.nullOr types.str;
-          default = null;
-          description = "Database password. Warning: this is stored in cleartext in the Nix store!";
+          type = types.str;
+          default = "";
+          description = ''
+            The password corresponding to <option>database.user</option>.
+            Warning: this is stored in cleartext in the Nix store!
+            Use <option>database.passwordFile</option> instead.
+          '';
         };
 
-        #passwordFile = mkOption {}; #TODO
+        passwordFile = mkOption {
+          type = types.nullOr types.path;
+          default = null;
+          example = "/run/keys/sympa-dbpassword";
+          description = ''
+            A file containing the password corresponding to
+            <option>database.user</option>.
+          '';
+        };
       };
 
       web = {
@@ -229,6 +244,16 @@ in
           gid = config.ids.gids.sympa;
         };
 
+      warnings = optional (cfg.database.password != "")
+        ''config.services.sympa.database.password will be stored as plaintext
+          in the Nix store. Use database.passwordFile instead.'';
+
+      # Create database passwordFile default when password is configured.
+      services.sympa.database.passwordFile =
+        (mkDefault (toString (pkgs.writeTextFile {
+          name = "sympa-database-password";
+          text = cfg.database.password;
+        })));
 
       services.postfix = {
         # XXX: ?? proly not
@@ -332,7 +357,17 @@ in
         preStart = ''
           mkdir -p /srv/sympa/spool
           mkdir -p /srv/sympa/list_data
+
           cp ${mainConfig} /srv/sympa/sympa.conf
+          chmod 600 /srv/sympa/sympa.conf
+          DBPASS="$(head -n1 ${cfg.database.passwordFile})"
+          if [ -n "$DBPASS" ]; then
+              sed -e "s,#dbpass#,$DBPASS,g" \
+                  -i /srv/sympa/sympa.conf
+          else
+              sed -e "/db_passwd.*#dbpass#/d" \
+                  -i /srv/sympa/sympa.conf
+          fi
 
           ${concatStringsSep "\n" (flip map virtDomains (domain:
           ''
