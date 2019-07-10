@@ -1,4 +1,6 @@
-{ stdenv, perlPackages, fetchurl, makeWrapper }:
+{ stdenv, perlPackages, fetchurl, makeWrapper
+, dataDir ? "/var/lib/sympa"
+}:
 
 let
   pname = "sympa";
@@ -16,10 +18,13 @@ stdenv.mkDerivation rec {
     "--without-initdir"
     "--without-unitsdir"
     "--without-smrshdir"
+
+    "--with-lockdir=/run/lock"
     "--with-piddir=/run/sympa"
-    "--with-spooldir=/srv/sympa/spool"
-    "--with-confdir=/srv/sympa"
-    "--sysconfdir=/srv/sympa"
+    "--with-confdir=${dataDir}/etc"
+    "--sysconfdir=${dataDir}/etc"
+    "--with-spooldir=${dataDir}/spool"
+    "--with-expldir=${dataDir}/list_data"
   ];
   buildInputs = [ perlPackages.perl makeWrapper ];
   propagatedBuildInputs = with perlPackages; [
