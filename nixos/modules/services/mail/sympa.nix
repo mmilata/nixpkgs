@@ -10,6 +10,8 @@ let
   # FIXME: force https for wwsympa_url (=generated links)?
   # cfg.web.https will still be useful when there's https proxy in front of our nginx
   url = "http${if cfg.web.https then "s" else ""}://${cfg.web.virtualHost}${cfg.web.location}";
+  pkg = cfg.package.override { inherit (cfg) dataDir; };
+  dataDir = cfg.dataDir;
 
   sympaSubServices = [
     "sympa-archive.service"
@@ -23,7 +25,9 @@ let
     listmaster  ${concatStringsSep "," cfg.listMasters}
     lang        ${cfg.lang}
 
-    home /srv/sympa/list_data
+    home ${dataDir}/list_data
+    arc_path ${dataDir}/arc
+    bounce_path ${dataDir}/bounce
 
     db_type ${cfg.database.type}
     db_name ${cfg.database.name}
@@ -33,7 +37,7 @@ let
     db_passwd #dbpass#
 
     sendmail /run/wrappers/bin/sendmail
-    sendmail_aliases /srv/sympa/sympa_transport
+    sendmail_aliases ${dataDir}/sympa_transport
 
     aliases_program ${pkgs.postfix}/bin/postmap
     aliases_db_type hash
@@ -41,9 +45,9 @@ let
     ${optionalString cfg.web.enable ''
       # WEB
       wwsympa_url         ${strings.removeSuffix "/" url}
-      static_content_path /srv/sympa/static_content
-      css_path            /srv/sympa/static_content/css
-      pictures_path       /srv/sympa/static_content/pictures
+      static_content_path ${dataDir}/static_content
+      css_path            ${dataDir}/static_content/css
+      pictures_path       ${dataDir}/static_content/pictures
       mhonarc             ${pkgs.perlPackages.MHonArc}/bin/mhonarc
     ''}
 
@@ -100,6 +104,18 @@ in
         type = types.bool;
         default = false;
         description = "Whether to enable Sympa mailing list manager.";
+      };
+
+      package = mkOption {
+        type = types.package;
+        default = pkgs.sympa;
+        description = "Which Sympa package to use.";
+      };
+
+      dataDir = mkOption {
+        type = types.path;
+        default = "/var/lib/sympa";
+        description = "Data directory where state is stored.";
       };
 
       user = mkOption {
@@ -170,7 +186,7 @@ in
 
         name = mkOption {
           type = types.str;
-          default = if cfg.database.type == "SQLite" then "/srv/sympa/sympa.sqlite" else "sympa";
+          default = if cfg.database.type == "SQLite" then "/var/lib/sympa/sympa.sqlite" else "sympa";
           description = ''
             Database name. When using SQLite this must be an absolute
             path to the database file.
@@ -263,7 +279,7 @@ in
     {
 
       environment = {
-        systemPackages = [ pkgs.sympa ];
+        systemPackages = [ pkg ];
       };
 
       users.users = optional (user == "sympa")
@@ -297,16 +313,16 @@ in
         enable = true;
         recipientDelimiter = "+";
         config = {
-          virtual_alias_maps = [ "hash:/srv/sympa/virtual.sympa" ];
+          virtual_alias_maps = [ "hash:${dataDir}/virtual.sympa" ];
           virtual_mailbox_maps = [
-            "hash:/srv/sympa/transport.sympa"
-            "hash:/srv/sympa/sympa_transport"
-            "hash:/srv/sympa/virtual.sympa"
+            "hash:${dataDir}/transport.sympa"
+            "hash:${dataDir}/sympa_transport"
+            "hash:${dataDir}/virtual.sympa"
           ];
-          virtual_mailbox_domains = [ "hash:/srv/sympa/transport.sympa" ];
+          virtual_mailbox_domains = [ "hash:${dataDir}/transport.sympa" ];
           transport_maps = [
-            "hash:/srv/sympa/transport.sympa"
-            "hash:/srv/sympa/sympa_transport"
+            "hash:${dataDir}/transport.sympa"
+            "hash:${dataDir}/sympa_transport"
           ];
         };
         masterConfig = {
@@ -318,7 +334,7 @@ in
             args = [
               "flags=hqRu"
               "user=${user}"
-              "argv=${pkgs.sympa}/bin/queue"
+              "argv=${pkg}/bin/queue"
               "\${nexthop}"
             ];
           };
@@ -330,7 +346,7 @@ in
             args = [
               "flags=hqRu"
               "user=${user}"
-              "argv=${pkgs.sympa}/bin/bouncequeue"
+              "argv=${pkg}/bin/bouncequeue"
               "\${nexthop}"
             ];
           };
@@ -346,57 +362,60 @@ in
 
         wantedBy = [ "multi-user.target" ];
         after = [ "network.target" ];
-        path = [ pkgs.sympa ];
+        path = [ pkg ];
         wants = sympaSubServices;
         before = sympaSubServices;
 
         serviceConfig = {
           Type = "forking";
           Restart = "always";
-          ExecStart = "${pkgs.sympa}/bin/sympa_msg.pl";
+          ExecStart = "${pkg}/bin/sympa_msg.pl";
           PIDFile = "/run/sympa/sympa_msg.pid";
         };
 
         preStart = ''
-          mkdir -p /srv/sympa/spool
-          mkdir -p /srv/sympa/list_data
+          mkdir -p ${dataDir}/etc
+          mkdir -p ${dataDir}/spool
+          mkdir -p ${dataDir}/list_data
+          mkdir -p ${dataDir}/arc
+          mkdir -p ${dataDir}/bounce
 
-          cp ${mainConfig} /srv/sympa/sympa.conf
-          chmod 600 /srv/sympa/sympa.conf
+          cp ${mainConfig} ${dataDir}/etc/sympa.conf
+          chmod 600 ${dataDir}/etc/sympa.conf
           DBPASS="$(head -n1 ${cfg.database.passwordFile})"
           if [ -n "$DBPASS" ]; then
               sed -e "s,#dbpass#,$DBPASS,g" \
-                  -i /srv/sympa/sympa.conf
+                  -i ${dataDir}/etc/sympa.conf
           else
               sed -e "/db_passwd.*#dbpass#/d" \
-                  -i /srv/sympa/sympa.conf
+                  -i ${dataDir}/etc/sympa.conf
           fi
 
           ${concatStringsSep "\n" (flip map virtDomains (domain:
           ''
-            mkdir -p -m 750 /srv/sympa/${domain}
-            touch /srv/sympa/${domain}/robot.conf
-            mkdir -p -m 750 /srv/sympa/list_data/${domain}
+            mkdir -p -m 750 ${dataDir}/etc/${domain}
+            touch ${dataDir}/etc/${domain}/robot.conf
+            mkdir -p -m 750 ${dataDir}/list_data/${domain}
           ''))}
 
-          cp ${virtual} /srv/sympa/virtual.sympa
-          cp ${transport} /srv/sympa/transport.sympa
-          cp ${listAliases} /srv/sympa/list_aliases.tt2
+          cp ${virtual} ${dataDir}/virtual.sympa
+          cp ${transport} ${dataDir}/transport.sympa
+          cp ${listAliases} ${dataDir}/list_aliases.tt2
 
-          touch /srv/sympa/sympa_transport
+          touch ${dataDir}/sympa_transport
 
-          ${pkgs.postfix}/bin/postmap hash:/srv/sympa/virtual.sympa
-          ${pkgs.postfix}/bin/postmap hash:/srv/sympa/transport.sympa
-          ${pkgs.sympa}/bin/sympa_newaliases.pl
+          ${pkgs.postfix}/bin/postmap hash:${dataDir}/virtual.sympa
+          ${pkgs.postfix}/bin/postmap hash:${dataDir}/transport.sympa
+          ${pkg}/bin/sympa_newaliases.pl
 
 
-          cp -a ${pkgs.sympa}/static_content /srv/sympa/
+          cp -a ${pkg}/static_content ${dataDir}/
           # Yes, wwsympa needs write access to static_content..
-          chmod -R 755 /srv/sympa/static_content/css/
+          chmod -R 755 ${dataDir}/static_content/css/
 
 
-          chown -R ${user}:${group} /srv/sympa
-          ${pkgs.sympa}/bin/sympa.pl --health_check
+          chown -R ${user}:${group} ${dataDir}
+          ${pkg}/bin/sympa.pl --health_check
         '';
       };
       systemd.services.sympa-archive = {
@@ -406,7 +425,7 @@ in
         serviceConfig = {
           Type = "forking";
           Restart = "always";
-          ExecStart = "${pkgs.sympa}/bin/archived.pl";
+          ExecStart = "${pkg}/bin/archived.pl";
           PIDFile = "/run/sympa/archived.pid";
         };
       };
@@ -417,7 +436,7 @@ in
         serviceConfig = {
           Type = "forking";
           Restart = "always";
-          ExecStart = "${pkgs.sympa}/bin/bounced.pl";
+          ExecStart = "${pkg}/bin/bounced.pl";
           PIDFile = "/run/sympa/bounced.pid";
         };
       };
@@ -428,7 +447,7 @@ in
         serviceConfig = {
           Type = "forking";
           Restart = "always";
-          ExecStart = "${pkgs.sympa}/bin/bulk.pl";
+          ExecStart = "${pkg}/bin/bulk.pl";
           PIDFile = "/run/sympa/bulk.pid";
         };
       };
@@ -439,7 +458,7 @@ in
         serviceConfig = {
           Type = "forking";
           Restart = "always";
-          ExecStart = "${pkgs.sympa}/bin/task_manager.pl";
+          ExecStart = "${pkg}/bin/task_manager.pl";
           PIDFile = "/run/sympa/task_manager.pid";
         };
       };
@@ -461,7 +480,7 @@ in
             -F ${toString cfg.web.fcgiProcs} \
             -P /run/sympa/wwsympa.pid \
             -s /run/sympa/wwsympa.socket \
-            ${pkgs.sympa}/bin/wwsympa.fcgi
+            ${pkg}/bin/wwsympa.fcgi
           '';
           PIDFile = "/run/sympa/wwsympa.pid";
         };
@@ -480,11 +499,11 @@ in
               fastcgi_split_path_info ^(${cfg.web.location})(.*)$;
 
               fastcgi_param PATH_INFO       $fastcgi_path_info;
-              fastcgi_param SCRIPT_FILENAME ${pkgs.sympa}/bin/wwsympa.fcgi;
+              fastcgi_param SCRIPT_FILENAME ${pkg}/bin/wwsympa.fcgi;
             '';
           };
 
-          locations."/static-sympa/".alias = "/srv/sympa/static_content/";
+          locations."/static-sympa/".alias = "${dataDir}/static_content/";
         } // optionalAttrs cfg.web.https {
           forceSSL = mkDefault true;
           enableACME = mkDefault true;
