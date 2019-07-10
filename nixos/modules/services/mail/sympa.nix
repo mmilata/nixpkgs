@@ -7,9 +7,6 @@ let
   cfg = config.services.sympa;
   user = cfg.user;
   group = cfg.group;
-  # FIXME: force https for wwsympa_url (=generated links)?
-  # cfg.web.https will still be useful when there's https proxy in front of our nginx
-  url = "http${if cfg.web.https then "s" else ""}://${cfg.web.virtualHost}${cfg.web.location}";
   pkg = cfg.package.override { inherit (cfg) dataDir; };
   dataDir = cfg.dataDir;
 
@@ -44,7 +41,7 @@ let
 
     ${optionalString cfg.web.enable ''
       # WEB
-      wwsympa_url         ${strings.removeSuffix "/" url}
+      wwsympa_url         https://${cfg.web.virtualHost}${strings.removeSuffix "/" cfg.web.location}
       static_content_path ${dataDir}/static_content
       css_path            ${dataDir}/static_content/css
       pictures_path       ${dataDir}/static_content/pictures
@@ -253,7 +250,10 @@ in
         https = mkOption {
           type = types.bool;
           default = true;
-          description = "Whether to use HTTPS.";
+          description = ''
+            Whether to use HTTPS. When nginx integration is enabled, this option forces SSL and enables ACME.
+            Please note that Sympa web interface always uses https links even when this option is disabled.
+          '';
         };
 
         fcgiProcs = mkOption {
