@@ -17,6 +17,15 @@ let
     "sympa-task.service"
   ];
 
+  sympaServiceConfig = srv: {
+    Type = "forking";
+    Restart = "always";
+    ExecStart = "${pkg}/bin/${srv}.pl";
+    PIDFile = "/run/sympa/${srv}.pid";
+    User = "${user}";
+    Group = "${group}";
+  };
+
   mainConfig = pkgs.writeText "sympa.conf" ''
     domain      ${cfg.domain}
     listmaster  ${concatStringsSep "," cfg.listMasters}
@@ -287,6 +296,8 @@ in
           description = "Sympa mailing list manager user";
           uid = config.ids.uids.sympa;
           group = group;
+          home = cfg.dataDir;
+          createHome = true;
         };
 
       users.groups =
@@ -365,15 +376,10 @@ in
         path = [ pkg ];
         wants = sympaSubServices;
         before = sympaSubServices;
-
-        serviceConfig = {
-          Type = "forking";
-          Restart = "always";
-          ExecStart = "${pkg}/bin/sympa_msg.pl";
-          PIDFile = "/run/sympa/sympa_msg.pid";
-        };
+        serviceConfig = sympaServiceConfig "sympa_msg";
 
         preStart = ''
+          umask 0077
           mkdir -p ${dataDir}/etc
           mkdir -p ${dataDir}/spool
           mkdir -p ${dataDir}/list_data
@@ -381,7 +387,6 @@ in
           mkdir -p ${dataDir}/bounce
 
           cp ${mainConfig} ${dataDir}/etc/sympa.conf
-          chmod 600 ${dataDir}/etc/sympa.conf
           DBPASS="$(head -n1 ${cfg.database.passwordFile})"
           if [ -n "$DBPASS" ]; then
               sed -e "s,#dbpass#,$DBPASS,g" \
@@ -398,9 +403,9 @@ in
             mkdir -p -m 750 ${dataDir}/list_data/${domain}
           ''))}
 
-          cp ${virtual} ${dataDir}/virtual.sympa
-          cp ${transport} ${dataDir}/transport.sympa
-          cp ${listAliases} ${dataDir}/list_aliases.tt2
+          cp -f ${virtual} ${dataDir}/virtual.sympa
+          cp -f ${transport} ${dataDir}/transport.sympa
+          cp -f ${listAliases} ${dataDir}/list_aliases.tt2
 
           touch ${dataDir}/sympa_transport
 
@@ -409,12 +414,12 @@ in
           ${pkg}/bin/sympa_newaliases.pl
 
 
-          cp -a ${pkg}/static_content ${dataDir}/
+          cp -af ${pkg}/static_content ${dataDir}/
           # Yes, wwsympa needs write access to static_content..
-          chmod -R 755 ${dataDir}/static_content/css/
+          chmod -R u+w,a+X ${dataDir}/static_content/
+          # Make static_content accessible to nginx
+          chmod o+X ${dataDir}
 
-
-          chown -R ${user}:${group} ${dataDir}
           ${pkg}/bin/sympa.pl --health_check
         '';
       };
@@ -422,45 +427,25 @@ in
         description = "Sympa mailing list manager (archiving)";
         bindsTo = [ "sympa.service" ];
         restartTriggers = [ mainConfig ];
-        serviceConfig = {
-          Type = "forking";
-          Restart = "always";
-          ExecStart = "${pkg}/bin/archived.pl";
-          PIDFile = "/run/sympa/archived.pid";
-        };
+        serviceConfig = sympaServiceConfig "archived";
       };
       systemd.services.sympa-bounce = {
         description = "Sympa mailing list manager (bounce processing)";
         bindsTo = [ "sympa.service" ];
         restartTriggers = [ mainConfig ];
-        serviceConfig = {
-          Type = "forking";
-          Restart = "always";
-          ExecStart = "${pkg}/bin/bounced.pl";
-          PIDFile = "/run/sympa/bounced.pid";
-        };
+        serviceConfig = sympaServiceConfig "bounced";
       };
       systemd.services.sympa-bulk = {
         description = "Sympa mailing list manager (message distribution)";
         bindsTo = [ "sympa.service" ];
         restartTriggers = [ mainConfig ];
-        serviceConfig = {
-          Type = "forking";
-          Restart = "always";
-          ExecStart = "${pkg}/bin/bulk.pl";
-          PIDFile = "/run/sympa/bulk.pid";
-        };
+        serviceConfig = sympaServiceConfig "bulk";
       };
       systemd.services.sympa-task = {
         description = "Sympa mailing list manager (task management)";
         bindsTo = [ "sympa.service" ];
         restartTriggers = [ mainConfig ];
-        serviceConfig = {
-          Type = "forking";
-          Restart = "always";
-          ExecStart = "${pkg}/bin/task_manager.pl";
-          PIDFile = "/run/sympa/task_manager.pid";
-        };
+        serviceConfig = sympaServiceConfig "task_manager";
       };
     }
 
