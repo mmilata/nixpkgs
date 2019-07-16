@@ -194,6 +194,10 @@ in
               webHost = "lists.example.org";
               webLocation = "/";
             };
+            "sympa.example.com" = {
+              webHost = "example.com";
+              webLocation = "/sympa";
+            };
           };
         '';
       };
@@ -367,7 +371,7 @@ in
           mkdir -p ${dataDir}/arc
           mkdir -p ${dataDir}/bounce
 
-          cp ${mainConfig} ${dataDir}/etc/sympa.conf
+          cp -f ${mainConfig} ${dataDir}/etc/sympa.conf
           DBPASS="$(head -n1 ${cfg.database.passwordFile})"
           if [ -n "$DBPASS" ]; then
               sed -e "s,#dbpass#,$DBPASS,g" \
@@ -390,8 +394,10 @@ in
 
           touch ${dataDir}/sympa_transport
 
-          ${pkgs.postfix}/bin/postmap hash:${dataDir}/virtual.sympa
-          ${pkgs.postfix}/bin/postmap hash:${dataDir}/transport.sympa
+          ${optionalString (cfg.mta.type == "postfix") ''
+            ${pkgs.postfix}/bin/postmap hash:${dataDir}/virtual.sympa
+            ${pkgs.postfix}/bin/postmap hash:${dataDir}/transport.sympa
+          ''}
           ${pkg}/bin/sympa_newaliases.pl
 
 
