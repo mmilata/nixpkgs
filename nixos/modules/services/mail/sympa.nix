@@ -9,6 +9,7 @@ let
   group = cfg.group;
   pkg = cfg.package.override { inherit (cfg) dataDir; };
   dataDir = cfg.dataDir;
+  fqdns = mapAttrsToList (name: _val: name) cfg.domains;
 
   sympaSubServices = [
     "sympa-archive.service"
@@ -27,7 +28,7 @@ let
   };
 
   mainConfig = pkgs.writeText "sympa.conf" ''
-    domain      ${cfg.domain}
+    domain      ${if cfg.mainDomain != null then cfg.mainDomain else (head fqdns)}
     listmaster  ${concatStringsSep "," cfg.listMasters}
     lang        ${cfg.lang}
 
@@ -49,8 +50,6 @@ let
     aliases_db_type hash
 
     ${optionalString cfg.web.enable ''
-      # WEB
-      wwsympa_url         https://${cfg.web.virtualHost}${strings.removeSuffix "/" cfg.web.location}
       static_content_path ${dataDir}/static_content
       css_path            ${dataDir}/static_content/css
       pictures_path       ${dataDir}/static_content/pictures
@@ -60,9 +59,16 @@ let
     ${cfg.extraConfig}
   '';
 
-  virtDomains = unique (cfg.virtualDomains);
+  robotConfig = fqdn: domain: pkgs.writeText "${fqdn}-robot.conf" ''
+    ${optionalString (cfg.web.enable && domain.webHost != null) ''
+      # WEB
+      wwsympa_url         https://${domain.webHost}${strings.removeSuffix "/" domain.webLocation}
+    ''}
 
-  transport = pkgs.writeText "transport.sympa" (concatStringsSep "\n" (flip map virtDomains (domain: ''
+    ${domain.extraConfig}
+  '';
+
+  transport = pkgs.writeText "transport.sympa" (concatStringsSep "\n" (flip map fqdns (domain: ''
     ${domain}                        error:User unknown in recipient table
     sympa@${domain}                  sympa:sympa@${domain}
     listmaster@${domain}             sympa:listmaster@${domain}
@@ -70,7 +76,7 @@ let
     abuse-feedback-report@${domain}  sympabounce:sympa@${domain}
   '')));
 
-  virtual = pkgs.writeText "virtual.sympa" (concatStringsSep "\n" (flip map virtDomains (domain: ''
+  virtual = pkgs.writeText "virtual.sympa" (concatStringsSep "\n" (flip map fqdns (domain: ''
     sympa-request@${domain}  postmaster@localhost
     sympa-owner@${domain}    postmaster@localhost
   '')));
@@ -84,19 +90,6 @@ let
     [% list.name %]-unsubscribe@[% list.domain %] sympa:[% list.name %]-unsubscribe@[% list.domain %]
     [% list.name %][% return_path_suffix %]@[% list.domain %] sympabounce:[% list.name %]@[% list.domain %]
   '';
-
-  listModule = { ... }: {
-    options = {
-      name = mkOption {
-        type = types.str;
-        description = "Name of the mailinglist";
-      };
-      domain = mkOption {
-        type = types.str;
-        description = "Domain of the mailinglist";
-      };
-    };
-  };
 in
 {
 
@@ -143,30 +136,63 @@ in
         description = "Sympa language.";
       };
 
-      domain = mkOption {
-        type = types.str;
-        description = ''
-          FQDN of the mailinglist server.
-        '';
-        example = "sympa.example.org";
-      };
-
-      virtualDomains = mkOption {
-        type = types.listOf types.str;
-        example = [
-          "sympa.example.org"
-          "lists.example.org"
-        ];
-
-        description = "Virtual domains handled by this instances";
-      };
-
       listMasters = mkOption {
         type = types.listOf types.str;
         example = [ "postmaster@sympa.example.org" ];
         description = ''
           The list of the email addresses of the listmasters
           (users authorized to perform global server commands).
+        '';
+      };
+
+      mainDomain = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "lists.example.org";
+        description = ''
+          Main domain to be used in sympa.conf.
+          If null, one of the <option>domains</option> is chosen for you.
+        '';
+      };
+
+      domains = mkOption {
+        type = types.attrsOf (types.submodule {
+          options = {
+            webHost = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              example = "archive.example.org";
+              description = ''
+                Domain part of the web interface URL (no web interface for this domain if null).
+                DNS record of type A (or AAAA) has to exist with this value.
+              '';
+            };
+            webLocation = mkOption {
+              type = types.str;
+              default = "/";
+              example = "/sympa";
+              description = "URL path part of the web interface.";
+            };
+            extraConfig = mkOption {
+              type = types.lines;
+              default = "";
+              description = ''
+                These lines go to the end of the robot.conf verbatim.
+              '';
+            };
+          };
+        });
+        description = ''
+          Email domains handled by this instance. There have
+          to be MX records for keys of this attribute set.
+        '';
+        example = literalExample ''
+          {
+            "lists.example.org" = {
+              webHost = "lists.example.org";
+              webLocation = "/";
+            };
+          };
         '';
       };
 
@@ -242,20 +268,6 @@ in
           '';
         };
 
-        virtualHost = mkOption {
-          type = types.nullOr types.str;
-          default = null;
-          example = "example.org";
-          description = "Domain part of the web interface URL (service.sympa.domain is used if null).";
-        };
-
-        location = mkOption {
-          type = types.str;
-          default = "/";
-          example = "/sympa";
-          description = "URL path part of the web interface.";
-        };
-
         https = mkOption {
           type = types.bool;
           default = true;
@@ -316,8 +328,6 @@ in
           name = "sympa-database-password";
           text = cfg.database.password;
         })));
-
-      services.sympa.web.virtualHost = mkDefault cfg.domain;
 
       services.postfix = {
         # XXX: ?? proly not
@@ -396,11 +406,11 @@ in
                   -i ${dataDir}/etc/sympa.conf
           fi
 
-          ${concatStringsSep "\n" (flip map virtDomains (domain:
+          ${concatStringsSep "\n" (flip mapAttrsToList cfg.domains (fqdn: domain:
           ''
-            mkdir -p -m 750 ${dataDir}/etc/${domain}
-            touch ${dataDir}/etc/${domain}/robot.conf
-            mkdir -p -m 750 ${dataDir}/list_data/${domain}
+            mkdir -p -m 750 ${dataDir}/etc/${fqdn}
+            cp ${robotConfig fqdn domain} ${dataDir}/etc/${fqdn}/robot.conf
+            mkdir -p -m 750 ${dataDir}/list_data/${fqdn}
           ''))}
 
           cp -f ${virtual} ${dataDir}/virtual.sympa
@@ -474,27 +484,28 @@ in
 
     (mkIf (cfg.web.enable && cfg.web.server == "nginx") {
       services.nginx.enable = true;
-      services.nginx.virtualHosts = {
-        "${cfg.web.virtualHost}" = {
-          locations."${cfg.web.location}" = {
-            extraConfig = ''
-              include ${pkgs.nginx}/conf/fastcgi_params;
 
-              fastcgi_pass unix:/run/sympa/wwsympa.socket;
-              fastcgi_split_path_info ^(${cfg.web.location})(.*)$;
+      services.nginx.virtualHosts = let
+        vHosts = unique (remove null (mapAttrsToList (_k: v: v.webHost) cfg.domains));
+        hostLocations = host: mapAttrsToList (_k: v: v.webLocation) (filterAttrs (_k: v: v.webHost == host) cfg.domains);
+        httpsOpts = optionalAttrs cfg.web.https { forceSSL = mkDefault true; enableACME = mkDefault true; };
+      in
+      genAttrs vHosts (host: {
+        locations = genAttrs (hostLocations host) (loc: {
+          extraConfig = ''
+            include ${pkgs.nginx}/conf/fastcgi_params;
 
-              fastcgi_param PATH_INFO       $fastcgi_path_info;
-              fastcgi_param SCRIPT_FILENAME ${pkg}/bin/wwsympa.fcgi;
-            '';
-          };
+            fastcgi_pass unix:/run/sympa/wwsympa.socket;
+            fastcgi_split_path_info ^(${loc})(.*)$;
 
-          locations."/static-sympa/".alias = "${dataDir}/static_content/";
-        } // optionalAttrs cfg.web.https {
-          forceSSL = mkDefault true;
-          enableACME = mkDefault true;
+            fastcgi_param PATH_INFO       $fastcgi_path_info;
+            fastcgi_param SCRIPT_FILENAME ${pkg}/bin/wwsympa.fcgi;
+          '';
+        }) // {
+          "/static-sympa/".alias = "${dataDir}/static_content/";
         };
-      };
-
+      } // httpsOpts);
     })
+
   ]);
 }
