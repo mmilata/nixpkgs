@@ -28,12 +28,12 @@ let
   };
 
   mainConfig = pkgs.writeText "sympa.conf" ''
-    domain      ${if cfg.mainDomain != null then cfg.mainDomain else (head fqdns)}
-    listmaster  ${concatStringsSep "," cfg.listMasters}
-    lang        ${cfg.lang}
+    domain     ${if cfg.mainDomain != null then cfg.mainDomain else (head fqdns)}
+    listmaster ${concatStringsSep "," cfg.listMasters}
+    lang       ${cfg.lang}
 
-    home ${dataDir}/list_data
-    arc_path ${dataDir}/arc
+    home        ${dataDir}/list_data
+    arc_path    ${dataDir}/arc
     bounce_path ${dataDir}/bounce
 
     db_type ${cfg.database.type}
@@ -44,7 +44,7 @@ let
     db_passwd #dbpass#
 
     ${optionalString (cfg.mta.type == "postfix") ''
-      sendmail ${pkgs.postfix}/bin/sendmail
+      sendmail         /run/wrappers/bin/sendmail
       sendmail_aliases ${dataDir}/sympa_transport
 
       aliases_program ${pkgs.postfix}/bin/postmap
@@ -390,7 +390,7 @@ in
 
           cp -f ${virtual} ${dataDir}/virtual.sympa
           cp -f ${transport} ${dataDir}/transport.sympa
-          cp -f ${listAliases} ${dataDir}/list_aliases.tt2
+          cp -f ${listAliases} ${dataDir}/etc/list_aliases.tt2
 
           touch ${dataDir}/sympa_transport
 
