@@ -43,11 +43,13 @@ let
     ${optionalString (cfg.database.user != null) "db_user ${cfg.database.user}"}
     db_passwd #dbpass#
 
-    sendmail /run/wrappers/bin/sendmail
-    sendmail_aliases ${dataDir}/sympa_transport
+    ${optionalString (cfg.mta.type == "postfix") ''
+      sendmail ${pkgs.postfix}/bin/sendmail
+      sendmail_aliases ${dataDir}/sympa_transport
 
-    aliases_program ${pkgs.postfix}/bin/postmap
-    aliases_db_type hash
+      aliases_program ${pkgs.postfix}/bin/postmap
+      aliases_db_type hash
+    ''}
 
     ${optionalString cfg.web.enable ''
       static_content_path ${dataDir}/static_content
@@ -284,6 +286,20 @@ in
         };
       };
 
+      mta = {
+        type = mkOption {
+          type = types.enum [ "postfix" "none" ];
+          default = "postfix";
+          description = ''
+            Mail transfer agent (MTA) integration. Use `none` if you want to configure it yourself.
+
+            The `postfix` integration sets up local Postfix instance that will pass incoming
+            messages from configured domains to Sympa. You still need to configure at least
+            outgoing message handling using e.g. <option>services.postfix.relayHost</option>.
+          '';
+        };
+      };
+
       extraConfig = mkOption {
         type = types.lines;
         default = "";
@@ -328,51 +344,6 @@ in
           name = "sympa-database-password";
           text = cfg.database.password;
         })));
-
-      services.postfix = {
-        # XXX: ?? proly not
-        enable = true;
-        recipientDelimiter = "+";
-        config = {
-          virtual_alias_maps = [ "hash:${dataDir}/virtual.sympa" ];
-          virtual_mailbox_maps = [
-            "hash:${dataDir}/transport.sympa"
-            "hash:${dataDir}/sympa_transport"
-            "hash:${dataDir}/virtual.sympa"
-          ];
-          virtual_mailbox_domains = [ "hash:${dataDir}/transport.sympa" ];
-          transport_maps = [
-            "hash:${dataDir}/transport.sympa"
-            "hash:${dataDir}/sympa_transport"
-          ];
-        };
-        masterConfig = {
-          "sympa" = {
-            type = "unix";
-            privileged = true;
-            chroot = false;
-            command = "pipe";
-            args = [
-              "flags=hqRu"
-              "user=${user}"
-              "argv=${pkg}/bin/queue"
-              "\${nexthop}"
-            ];
-          };
-          "sympabounce" = {
-            type = "unix";
-            privileged = true;
-            chroot = false;
-            command = "pipe";
-            args = [
-              "flags=hqRu"
-              "user=${user}"
-              "argv=${pkg}/bin/bouncequeue"
-              "\${nexthop}"
-            ];
-          };
-        };
-      };
 
       systemd.tmpfiles.rules = [
         "d '/run/sympa' 0755 ${user} ${group} - -"
@@ -505,6 +476,52 @@ in
           "/static-sympa/".alias = "${dataDir}/static_content/";
         };
       } // httpsOpts);
+    })
+
+    (mkIf (cfg.mta.type == "postfix") {
+      services.postfix = {
+        enable = true;
+        recipientDelimiter = "+";
+        config = {
+          virtual_alias_maps = [ "hash:${dataDir}/virtual.sympa" ];
+          virtual_mailbox_maps = [
+            "hash:${dataDir}/transport.sympa"
+            "hash:${dataDir}/sympa_transport"
+            "hash:${dataDir}/virtual.sympa"
+          ];
+          virtual_mailbox_domains = [ "hash:${dataDir}/transport.sympa" ];
+          transport_maps = [
+            "hash:${dataDir}/transport.sympa"
+            "hash:${dataDir}/sympa_transport"
+          ];
+        };
+        masterConfig = {
+          "sympa" = {
+            type = "unix";
+            privileged = true;
+            chroot = false;
+            command = "pipe";
+            args = [
+              "flags=hqRu"
+              "user=${user}"
+              "argv=${pkg}/bin/queue"
+              "\${nexthop}"
+            ];
+          };
+          "sympabounce" = {
+            type = "unix";
+            privileged = true;
+            chroot = false;
+            command = "pipe";
+            args = [
+              "flags=hqRu"
+              "user=${user}"
+              "argv=${pkg}/bin/bouncequeue"
+              "\${nexthop}"
+            ];
+          };
+        };
+      };
     })
 
   ]);
