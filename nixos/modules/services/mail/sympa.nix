@@ -384,7 +384,7 @@ in
           ${concatStringsSep "\n" (flip mapAttrsToList cfg.domains (fqdn: domain:
           ''
             mkdir -p -m 750 ${dataDir}/etc/${fqdn}
-            cp ${robotConfig fqdn domain} ${dataDir}/etc/${fqdn}/robot.conf
+            cp -f ${robotConfig fqdn domain} ${dataDir}/etc/${fqdn}/robot.conf
             mkdir -p -m 750 ${dataDir}/list_data/${fqdn}
           ''))}
 
