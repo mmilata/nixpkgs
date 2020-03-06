@@ -12,6 +12,7 @@
 , "alloy"
 , "asar"
 , "bash-language-server"
+, "bitcoind-exporter"
 , "bower"
 , "bower2nix"
 , "browserify"
